@@ -1,0 +1,50 @@
+{
+  "inputs": {
+    "glove_address": "tcp://127.0.0.1:8001",
+    "pose_address": "tcp://127.0.0.1:5557",
+    "wrist_board_index": {"right": "0", "left": "1"},
+    "skeleton_address": "tcp://127.0.0.1:8000",
+    "glove_ids": {"right": "dc8b6ba8", "left": "5186fac7"}
+  },
+  "imu_fusion": {
+    "enabled": true,
+    "maximum_imu_age_s": 0.1,
+    "mount_file": "calibration/imu_mount_{side}.json",
+    "resolver": {"buffer_s": 20.0, "refit_every_s": 1.0, "min_samples": 60, "min_trusted": 30,
+                 "min_rotation_spread_deg": 25.0, "max_residual_deg": 15.0}
+  },
+  "tracking": {
+    "minimum_confidence": 0.5,
+    "maximum_pose_age_s": 0.75,
+    "lost_after_s": 2.0,
+    "maximum_glove_age_s": 0.5,
+    "countdown_s": 3.0
+  },
+  "wrist_calibration": {
+    "right": "calibration/right_wrist2board_calibration.json",
+    "left": null
+  },
+  "mapping": {
+    "axis_map": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    "position_scale": 1.5
+  },
+  "filter": {
+    "translation_alpha": 0.7,
+    "rotation_alpha": 0.85,
+    "maximum_jump_m": 0.08,
+    "maximum_jump_deg": 35.0
+  },
+  "ik": {
+    "maximum_joint_velocity_rad_s": 1.0,
+    "posture_cost": 0.01,
+    "collision_avoidance": true,
+    "minimum_distance_m": 0.01,
+    "collision_detection_distance_m": 0.08
+  },
+  "safety": {
+    "maximum_target_speed_m_s": 0.45,
+    "maximum_target_rotation_speed_deg_s": 180.0,
+    "home_joint_speed_rad_s": 0.5
+  },
+  "control_hz": 50.0
+}

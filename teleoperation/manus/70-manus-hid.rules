@@ -1,0 +1,6 @@
+# MANUS glove dongle (3325) and wireless transceiver (1915:83fd): allow non-root
+# access for the MANUS SDK (libusb and hidraw). Copied from the UR5 PC.
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="3325", MODE:="0666"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1915", ATTRS{idProduct}=="83fd", MODE:="0666"
+KERNEL=="hidraw*", ATTRS{idVendor}=="3325", MODE:="0666"
+KERNEL=="hidraw*", ATTRS{idVendor}=="1915", ATTRS{idProduct}=="83fd", MODE:="0666"

@@ -1,0 +1,10 @@
+Pose of the bottom camera (RealSense D455, serial 138322253845) in the World board frame.
+
+T_world_camera_bottom = T_world_camera (overhead D435i, unchanged) @ T_D435i_D455.
+
+T_D435i_D455 was estimated on 2026-10-12 from a screen recording of realsense-viewer
+showing both colour streams while a double-sided ChArUco board (5x7, 35 mm squares,
+the back printed mirrored so both faces share one board frame) was moved between the
+cameras: 201 frames with the board seen by both, AX = YB solved for the camera-to-camera
+transform and the face-to-face transform (found to be ~identity, a few mm).
+Residuals: rotation 0.52 deg, translation 3.7 mm (median). Camera distance 1.118 m.

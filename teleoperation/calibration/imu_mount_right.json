@@ -1,0 +1,10 @@
+{
+  "description": "Glove IMU -> Wrist board rotation (B in R_world_board = A R_imu B)",
+  "quaternion_xyzw": [
+    -0.20848442262735134,
+    0.12854835371432388,
+    -0.43976601134483323,
+    -0.8640691069266003
+  ],
+  "fit_residual_deg": 12.05406783632935
+}

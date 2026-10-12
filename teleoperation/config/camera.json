@@ -1,0 +1,17 @@
+{
+  "cameras": [
+    {
+      "type": "D405",
+      "serial_number": "242322072500",
+      "name": "overhead",
+      "extrinsic_calibration_file": "@TELEOP_DIR@/calibration/T_world_camera.npy"
+    },
+    {
+      "type": "D405",
+      "serial_number": "138322253845",
+      "name": "below",
+      "extrinsic_calibration_file": "@TELEOP_DIR@/calibration/T_world_camera_bottom.npy",
+      "clahe": true
+    }
+  ]
+}

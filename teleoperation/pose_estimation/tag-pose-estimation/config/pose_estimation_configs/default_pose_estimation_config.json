@@ -1,0 +1,17 @@
+{
+  "port": 5557,
+  "camera_configs": [
+    "config/camera_config/default_webcam_config.json",
+    "config/camera_config/another_camera_config.json"
+  ],
+  "object_board_definitions": [
+    "config/object_boards/some_board_here.json"
+  ],
+  "pose_estimation_frame_transform": "config/extrinsic_calibration/some_transform_file_here_eg_robot_base_in_world_frame.npy",
+  "detection_type": "ransac_with_refinement",
+  "frequency": 15,
+  "use_transform": false,
+  "tag_type": "apriltag",
+  "tag_family": "tag36h11",
+  "publish_image": true
+}
