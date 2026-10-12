@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bimanual-training"
+version = "0.1.0"
+description = "RL imitation training for the bimanual UR5e + DG-5F-S Twin on Isaac Lab 3.0 / Newton"
+requires-python = ">=3.12"
+dependencies = ["numpy", "torch", "tensorboard"]
+
+[tool.setuptools.packages.find]
+include = ["bimanual_training", "bimanual_training.*"]
