@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+MUJOCO_LOG.TXT
+teleoperation/demonstrations/
+teleoperation/pose_estimation/tag-pose-estimation/.venv/
+teleoperation/pose_estimation/tag-pose-estimation/local_apriltag/
+teleoperation/pose_estimation/tag-pose-estimation/config/extrinsic_calibration/
+teleoperation/manus/lib/
+deps/
+training/logs/
+training/assets/usd/
+*.egg-info/
+*.bak
+.warp_cache/
