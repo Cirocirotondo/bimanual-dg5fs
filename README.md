@@ -1,5 +1,7 @@
 # bimanual-dg5fs
 
+![The two Limbs at Home: UR5e Arms with DG-5F-S Hands pointing forward, thumbs up, around the Object on the Table](docs/images/bimanual_setup.png)
+
 Twin of Nando's bimanual setup (`../robohand-master_wsl3`, the *Reference setup*):
 two UR5e Arms, each carrying a 20-DOF Tesollo DG-5F-S Hand, for teleoperation and
 policy training. Vocabulary is defined in [CONTEXT.md](CONTEXT.md); design
@@ -8,8 +10,10 @@ decisions are in [docs/adr/](docs/adr/).
 - **Scene** (`src/bimanual_dg5fs/scene.py`): both Limbs, Table and Object in MuJoCo, also loadable in Newton.
 - **Teleoperation in the Scene** with two MANUS Gloves and one camera: see
   [teleoperation/README.md](teleoperation/README.md).
+- **RL training** in Isaac Lab, imitating recorded Demonstrations: see
+  [training/README.md](training/README.md).
 
-No Task environment or real-robot drivers yet.
+No real-robot drivers yet. The image is regenerated with `scripts/render_setup.py`.
 
 ## Setup
 
