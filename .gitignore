@@ -14,3 +14,5 @@ training/assets/usd/
 *.egg-info/
 *.bak
 .warp_cache/
+NIGHT_LOG.md
+WAVE_PLAN.md
