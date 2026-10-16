@@ -64,7 +64,7 @@ fi
 # Newest model_<N>.pt in the run directory, or nothing before the first save.
 latest_ckpt() {
   ls "$RUN_DIR"/model_*.pt 2>/dev/null \
-    | sed -n 's/.*model_\([0-9]*\)\.pt$/\1 &/p' | sort -n | tail -1 | cut -d' ' -f2
+    | sed -n 's/.*model_\([0-9]*\)\.pt$/\1 &/p' | sort -n | tail -1 | cut -d' ' -f2-
 }
 
 OUTCOME="status=failed reason=out_of_attempts"

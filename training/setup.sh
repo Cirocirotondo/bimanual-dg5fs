@@ -22,6 +22,6 @@ cd "$ROOT/deps/IsaacLab"
 PY="$ROOT/deps/IsaacLab/.venv/bin/python"
 "$UV" pip install --python "$PY" -e "$ROOT" --no-deps          # bimanual_dg5fs (Scene constants)
 "$UV" pip install --python "$PY" -e "$HERE" --no-deps          # bimanual_training
-"$UV" pip install --python "$PY" "pytorch_kinematics>=0.7" "mujoco==3.12.0" "yourdfpy==0.0.60"
+"$UV" pip install --python "$PY" "pytorch_kinematics>=0.7" "mujoco==3.12.0" "yourdfpy==0.0.60" "imageio-ffmpeg==0.6.0"
 "$PY" "$HERE/scripts/convert_urdf.py"
 echo "Done. Python interpreter: $PY"
