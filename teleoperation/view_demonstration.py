@@ -21,6 +21,7 @@ import numpy as np
 
 from bimanual_dg5fs import scene
 from teleoperation.core import TELEOP_DIR
+from teleoperation.outputs import extra_object_names, object_joint_names
 from teleoperation.run_sim import InsetView, set_camera
 
 
@@ -34,10 +35,10 @@ def find(name):
 
 
 class Playback:
-    def __init__(self, path, commanded=False):
+    def __init__(self, path, commanded=False, object_name="cube"):
         self.data_file = np.load(path)
         self.time = self.data_file["time"] - self.data_file["time"][0]
-        self.model = scene.build_model()
+        self.model = scene.build_model(object_name)
         self.data = mujoco.MjData(self.model)
         kind = "commanded" if commanded else "measured"
         self.joints = []                 # (qpos addresses, recorded array)
@@ -48,6 +49,10 @@ class Playback:
                                 self.data_file[f"{side}_hand_q_{kind}"]))
         self.object_adr = self.model.joint("object_free").qposadr[0]
         self.object = self.data_file["object_pose"]          # x y z qx qy qz qw
+        self.object_joints = ([self.model.joint(j).qposadr[0] for j in object_joint_names(self.model)],
+                              self.data_file["object_joint_q"]) if "object_joint_q" in self.data_file else None
+        self.extra = [(self.model.joint(f"{name}_free").qposadr[0], self.data_file[f"{name}_pose"])
+                      for name in extra_object_names(self.model) if f"{name}_pose" in self.data_file]
         scene.reset_to_home(self.model, self.data)
 
     def show(self, i):
@@ -55,6 +60,11 @@ class Playback:
             self.data.qpos[addresses] = values[i]
         x, y, z, qx, qy, qz, qw = self.object[i]
         self.data.qpos[self.object_adr:self.object_adr + 7] = [x, y, z, qw, qx, qy, qz]
+        if self.object_joints is not None:
+            self.data.qpos[self.object_joints[0]] = self.object_joints[1][i]
+        for adr, poses in self.extra:
+            x, y, z, qx, qy, qz, qw = poses[i]
+            self.data.qpos[adr:adr + 7] = [x, y, z, qw, qx, qy, qz]
         mujoco.mj_forward(self.model, self.data)
 
 
@@ -69,10 +79,13 @@ def main(argv=None):
 
     path = find(args.demonstration)
     info_path = path.with_suffix(".json")
+    object_name = "cube"
     if info_path.exists():
         info = json.loads(info_path.read_text())
-        print(f"{path.name}: {info['samples']} samples, {info['duration_s']:.1f} s, success {info['success']}")
-    playback = Playback(path, args.commanded)
+        object_name = info["scene"].get("object", "cube")
+        print(f"{path.name}: {info['samples']} samples, {info['duration_s']:.1f} s, success {info['success']}, "
+              f"Object {object_name}")
+    playback = Playback(path, args.commanded, object_name)
     inset = None if args.no_inset else InsetView(playback.model)
     with mujoco.viewer.launch_passive(playback.model, playback.data) as viewer:
         set_camera(viewer.cam)

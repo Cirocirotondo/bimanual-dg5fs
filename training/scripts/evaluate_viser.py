@@ -9,7 +9,7 @@ actions) is streamed live and then kept for frame-by-frame scrubbing.
 The Limbs are drawn with their meshes, the Reference as a transparent green
 ghost of both Limbs (``--ghost-offset`` puts it beside them instead of on top).
 Hand-base frames show where each palm is and where the Reference wants it.
-The table and the Reference's cube are context only: Training stage 1 has no
+The table and the Reference's Object are context only: Training stage 1 has no
 Object and no table to collide with.
 
 The numbers are the ones scripts/evaluate.py prints (worst Limb at each frame),
@@ -34,6 +34,7 @@ import torch
 from bimanual_dg5fs import scene
 from bimanual_training import ASSETS_DIR, LOGS_DIR, limbs
 from bimanual_training.launch import add_env_arguments, make_env
+from bimanual_training.video import drawn_object, object_mesh
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate import HAND_SUCCESS_RAD, PALM_SUCCESS_M, load_policy  # noqa: E402
@@ -113,6 +114,8 @@ class Evaluator:
             "palm_position": self.reference.palm_position.cpu().numpy(),
             "palm_quat": self.reference.palm_quat.cpu().numpy(),
             "object_pose": self.reference.object_pose.cpu().numpy(),
+            # The Scene's extra free bodies (the cube beside the basin), drawn as ghosts too.
+            **{f"{name}_pose": self.reference.extra_pose[name].cpu().numpy() for name in self.reference.extra_objects},
         }
         self.thresholds = (self.env.cfg.palm_keypoint_threshold_m, self.env.cfg.hand_position_threshold_rad)
         self.policies = {}
@@ -129,8 +132,18 @@ class Evaluator:
         top = scene.TABLE_TOP_Z
         self.server.scene.add_box("/table", dimensions=scene.TABLE_SIZE, color=(150, 120, 90), opacity=0.5,
                                   position=(*scene.TABLE_CENTER_XY, top - scene.TABLE_SIZE[2] / 2.0))
-        self.reference_cube = self.server.scene.add_box(
-            "/reference_cube", dimensions=(scene.OBJECT_SIZE,) * 3, color=(60, 180, 90), opacity=0.35)
+        object_name = drawn_object(self.env.cfg)
+        if object_name == "cube":
+            self.reference_object = self.server.scene.add_box(
+                "/reference_object", dimensions=(scene.OBJECT_SIZE,) * 3, color=(60, 180, 90), opacity=0.35)
+        else:
+            vertices, faces = object_mesh(object_name)
+            self.reference_object = self.server.scene.add_mesh_simple(
+                "/reference_object", vertices=vertices, faces=faces, color=(60, 180, 90), opacity=0.35)
+        self.reference_extras = {
+            name: self.server.scene.add_box(f"/reference_{name}", dimensions=(scene.OBJECT_SIZE,) * 3,
+                                            color=(60, 180, 90), opacity=0.35)
+            for name in self.reference.extra_objects if name == "cube"}
         ghost_shift = np.array([0.0, float(args.ghost_offset), 0.0])
         self.robots, self.ghosts, self.joint_order = {}, {}, {}
         self.palm_frames, self.reference_palm_frames = {}, {}
@@ -206,7 +219,9 @@ class Evaluator:
             self.ghosts[side].show_visual = bool(self.show_ghost.value)
             self.palm_frames[side].visible = bool(self.show_frames.value)
             self.reference_palm_frames[side].visible = bool(self.show_frames.value)
-        self.reference_cube.visible = bool(self.show_ghost.value)
+        self.reference_object.visible = bool(self.show_ghost.value)
+        for handle in self.reference_extras.values():
+            handle.visible = bool(self.show_ghost.value)
 
     def _toggle_play(self, _):
         with self.lock:
@@ -312,8 +327,12 @@ class Evaluator:
             frame.position = self.reference_np["palm_position"][index, limb]
             frame.wxyz = wxyz(self.reference_np["palm_quat"][index, limb])
         x, y, z, qx, qy, qz, qw = self.reference_np["object_pose"][index]
-        self.reference_cube.position = np.array([x, y, z]) + self.ghost_shift
-        self.reference_cube.wxyz = (qw, qx, qy, qz)
+        self.reference_object.position = np.array([x, y, z]) + self.ghost_shift
+        self.reference_object.wxyz = (qw, qx, qy, qz)
+        for name, handle in self.reference_extras.items():
+            x, y, z, qx, qy, qz, qw = self.reference_np[f"{name}_pose"][index]
+            handle.position = np.array([x, y, z]) + self.ghost_shift
+            handle.wxyz = (qw, qx, qy, qz)
 
     def _publish(self, index, live=False):
         with self.lock:

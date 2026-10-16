@@ -1,0 +1,13 @@
+{
+  "demonstration": "20261013_203512_basin_cube_2_trimmed.npz",
+  "object": "basin_cube",
+  "object_joints": [],
+  "frames": 2616,
+  "duration_s": 52.299999999813735,
+  "dt": 0.02,
+  "lowpass_hz": 3.0,
+  "resampled_from_samples": 2520,
+  "extra_objects": [
+    "cube"
+  ]
+}

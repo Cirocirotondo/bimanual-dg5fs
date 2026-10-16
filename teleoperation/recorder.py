@@ -13,7 +13,9 @@ npz keys, per side (``right_`` / ``left_`` prefix):
   wrist_alt_valid (T,) (the other pose of an ambiguous single tag), wrist_used_alternative (T,)
   (the Glove IMU chose it), imu_quaternion (T,4) xyzw, imu_valid (T,),
   glove_ergonomics_deg (T,20), glove_valid (T,)
-shared: time (T,) monotonic seconds, object_pose (T,7)
+shared: time (T,) monotonic seconds, object_pose (T,7), and for an articulated
+  Object object_joint_q (T,k) in the order of the JSON's scene.object_joints, and
+  <name>_pose (T,7) for each of the Scene's other free bodies (JSON scene.extra_objects)
 """
 import datetime
 import json
@@ -53,6 +55,10 @@ class DemonstrationRecorder:
         if self.samples is None:
             return
         sample = {"time": now, "object_pose": measured["object"]}
+        if len(measured.get("object_joints", ())):
+            sample["object_joint_q"] = measured["object_joints"]
+        for name, pose in measured.get("extra_objects", {}).items():
+            sample[f"{name}_pose"] = pose
         for side in SIDES:
             t, m = targets[side], measured[side]
             wrist, glove, imu = inputs.wrist[side], inputs.glove[side], inputs.imu[side]

@@ -16,3 +16,4 @@ training/assets/usd/
 .warp_cache/
 NIGHT_LOG.md
 WAVE_PLAN.md
+training/banks/*.pt

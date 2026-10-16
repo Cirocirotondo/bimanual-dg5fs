@@ -25,6 +25,10 @@ class SimOutput:
                          "hand": [model.joint(f"{s}/{j}").qposadr[0] for j in scene.HAND_JOINTS]}
                      for s in scene.SIDES}
         self.object_qadr = model.joint("object_free").qposadr[0]
+        # An articulated Object's joints (scene.OBJECT_JOINTS), e.g. the book's cover hinge.
+        self.object_joint_qadr = [model.joint(j).qposadr[0] for j in object_joint_names(model)]
+        # The Scene's other free bodies (scene.EXTRA_OBJECTS), e.g. the cube next to the basin.
+        self.extra_qadr = {name: model.joint(f"{name}_free").qposadr[0] for name in extra_object_names(model)}
         self.reset()
 
     def reset(self):
@@ -38,7 +42,9 @@ class SimOutput:
             mujoco.mj_step(self.model, self.data)
 
     def measured(self):
-        """{side: {"arm_q", "hand_q", "hand_base" (x y z qx qy qz qw)}, "object": (7,)}"""
+        """{side: {"arm_q", "hand_q", "hand_base" (x y z qx qy qz qw)}, "object": (7,),
+        "object_joints": (k,) the Object's joint positions (k = 0 for a rigid Object),
+        "extra_objects": {name: (7,)} the poses of the Scene's other free bodies}"""
         out = {}
         for side in scene.SIDES:
             body = self.data.body(f"{side}/link_base")
@@ -49,4 +55,22 @@ class SimOutput:
             }
         q = self.data.qpos[self.object_qadr:self.object_qadr + 7]
         out["object"] = np.r_[q[:3], q[4:7], q[3]]
+        out["object_joints"] = self.data.qpos[self.object_joint_qadr].copy()
+        out["extra_objects"] = {}
+        for name, adr in self.extra_qadr.items():
+            q = self.data.qpos[adr:adr + 7]
+            out["extra_objects"][name] = np.r_[q[:3], q[4:7], q[3]]
         return out
+
+
+def extra_object_names(model):
+    """The Scene's free bodies besides the Object (scene.EXTRA_OBJECTS)."""
+    names = {model.body(b).name for b in range(model.nbody)}
+    return [n for extra in scene.EXTRA_OBJECTS.values() for n in extra if n in names]
+
+
+def object_joint_names(model):
+    """The Scene's Object joints besides its free joint, in scene.OBJECT_JOINTS order."""
+    names = {model.joint(j).name for j in range(model.njnt)}
+    # Variants of one Object (bag, bag_sealed) share joint names: each joint once, in order.
+    return list(dict.fromkeys(j for joints in scene.OBJECT_JOINTS.values() for j in joints if j in names))

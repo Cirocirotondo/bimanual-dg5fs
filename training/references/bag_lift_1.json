@@ -1,0 +1,22 @@
+{
+  "demonstration": "20261015_110422_bag_lift_1.npz",
+  "object": "bag_sealed",
+  "object_joints": [
+    "bag_bend_0",
+    "bag_twist_0",
+    "bag_bend_1",
+    "bag_twist_1",
+    "bag_bend_2",
+    "bag_twist_2",
+    "bag_bend_3",
+    "bag_twist_3",
+    "bag_bend_4",
+    "bag_twist_4"
+  ],
+  "frames": 1151,
+  "duration_s": 23.0,
+  "dt": 0.02,
+  "lowpass_hz": 3.0,
+  "resampled_from_samples": null,
+  "extra_objects": []
+}

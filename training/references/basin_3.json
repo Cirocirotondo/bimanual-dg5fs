@@ -1,0 +1,8 @@
+{
+  "demonstration": "20261012_162034_basin_3_trimmed.npz",
+  "object": "basin",
+  "frames": 1234,
+  "duration_s": 24.65999575611204,
+  "dt": 0.02,
+  "lowpass_hz": 3.0
+}

@@ -73,14 +73,59 @@ class BimanualMotionImitationEnv(DirectRLEnv):
 
     def _setup_scene(self):
         self.limbs = [Articulation(getattr(self.cfg, f"{side}_limb")) for side in limbs.SIDES]
+        self._spawn_extras()
         positions = cloner.grid_transforms(self.scene.num_envs, self.scene.cfg.env_spacing)[0]
         plan = cloner.clone_plan_from_env_0("/World/envs/env_0", "/World/envs/env_{}", self.scene.num_envs,
                                             positions, global_paths=())
         cloner.replicate(plan)
         for side, limb in zip(limbs.SIDES, self.limbs):
             self.scene.articulations[f"{side}_limb"] = limb
+        self._register_extras()
         light = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light.func("/World/Light", light)
+
+    def ref(self, key, index, env_ids=None):
+        """The Reference's ``key`` (q, dq, palm_position, palm_quat, palm_keypoints, fingertips,
+        object_pose, object_velocity) at frames ``index`` for envs ``env_ids`` (all when None).
+
+        Every per-frame read of the Reference goes through here, so a Training stage
+        that moves the Reference per episode (Object placements) overrides only this.
+        """
+        return getattr(self.reference, key)[index]
+
+    def _before_reset(self, env_ids):
+        """Choose per-episode settings (e.g. the Object placement) before the reset reads the Reference."""
+
+    # Hooks for a Training stage with more than the Limbs (object_imitation_env.py).
+    def _spawn_extras(self):
+        """Spawn more assets in env_0 before it is cloned."""
+
+    def _register_extras(self):
+        """Register the extra assets with the scene after cloning."""
+
+    def _reset_extras(self, env_ids, start):
+        """Reset the extra assets of ``env_ids`` to Reference frame ``start``."""
+
+    def _extra_observations(self):
+        """``(N, k)`` observations appended after the Phase, or None."""
+        return None
+
+    def _observed_palm_pose(self, position, quat):
+        """The Hand-base pose as the policy observes it (stage 3 may move it into the
+        placement's frame)."""
+        return position, quat
+
+    def _observed_joints(self, q, targets, dq):
+        """Joints, drive targets and velocities ``(N, 2, 26)`` as the policy observes them."""
+        return q, targets, dq
+
+    def _world_twist(self, twist_actions):
+        """The policy's twist actions ``(N, 2, 6)`` as world-frame twists."""
+        return twist_actions
+
+    def _extra_violation(self):
+        """``(N,)`` bool: a stage-specific termination condition this step, or None."""
+        return None
 
     def _resolve_layout(self):
         device = self.device
@@ -128,13 +173,18 @@ class BimanualMotionImitationEnv(DirectRLEnv):
         n, device = self.num_envs, self.device
         self.actions = torch.zeros((n, self.cfg.action_space), device=device)
         self.previous_actions = torch.zeros_like(self.actions)
+        self.filtered_actions = torch.zeros_like(self.actions)
         self.position_targets = torch.zeros((n, NUM_LIMBS, limbs.NUM_JOINTS), device=device)
+        # The two previous steps' targets, for the targets' acceleration (vibration).
+        self.previous_targets = torch.zeros_like(self.position_targets)
+        self.previous_targets_2 = torch.zeros_like(self.position_targets)
         self.applied_targets = torch.zeros_like(self.position_targets)
         self.applied_arm_delta = torch.zeros((n, NUM_LIMBS, NA), device=device)
         self.ik_residual = torch.zeros((n, NUM_LIMBS), device=device)
         self.reference_index = torch.zeros(n, dtype=torch.long, device=device)
         self.palm_violation_steps = torch.zeros(n, dtype=torch.long, device=device)
         self.hand_violation_steps = torch.zeros(n, dtype=torch.long, device=device)
+        self.extra_violation_steps = torch.zeros(n, dtype=torch.long, device=device)
         self.suppress_arm_action_rate = torch.ones(n, dtype=torch.bool, device=device)
         self.episode_sums = {}
 
@@ -181,14 +231,14 @@ class BimanualMotionImitationEnv(DirectRLEnv):
             rotation = self.base_rotation[limb]
             position = pose[:, :3, 3] @ rotation.T + torch.tensor(limbs.base_pose(side)[0], device=self.device)
             quat = matrix_to_quat(rotation @ pose[:, :3, :3])
-            linear = self.reference.palm_position[following, limb] - position
+            linear = self.ref("palm_position", following)[:, limb] - position
             error = normalize_canonical_quaternion(quat_multiply(
-                self.reference.palm_quat[following, limb], quat * torch.tensor([-1.0, -1.0, -1.0, 1.0], device=self.device)))
+                self.ref("palm_quat", following)[:, limb], quat * torch.tensor([-1.0, -1.0, -1.0, 1.0], device=self.device)))
             norm = error[:, :3].norm(dim=-1, keepdim=True)
             angular = error[:, :3] / norm.clamp_min(1e-9) * 2.0 * torch.atan2(norm, error[:, 3:4])
             actions[:, limb, 0:3] = linear / (self.cfg.arm_translation_speed_m_per_s * self.step_dt)
             actions[:, limb, 3:6] = angular / (self.cfg.arm_rotation_speed_rad_per_s * self.step_dt)
-            actions[:, limb, 6:] = ((self.reference.q[following, limb, NA:] - self.default_hand[limb])
+            actions[:, limb, 6:] = ((self.ref("q", following)[:, limb, NA:] - self.default_hand[limb])
                                     / self.cfg.hand_action_scale)
         return actions.view(self.num_envs, -1)
 
@@ -230,12 +280,17 @@ class BimanualMotionImitationEnv(DirectRLEnv):
     def _pre_physics_step(self, actions: torch.Tensor):
         self.previous_actions.copy_(self.actions)
         self.actions.copy_(actions)
-        per_limb = self.actions.view(self.num_envs, NUM_LIMBS, ACTIONS_PER_LIMB)
-        arm = self._arm_targets(per_limb[..., :6], self.q[..., :NA], self.position_targets[..., :NA])
+        # First-order low-pass on the action the environment executes (simtoolreal's
+        # action_filter_alpha; 1 = raw). Rewards keep scoring the raw actions.
+        self.filtered_actions.lerp_(self.actions, self.cfg.action_filter_alpha)
+        per_limb = self.filtered_actions.view(self.num_envs, NUM_LIMBS, ACTIONS_PER_LIMB)
+        arm = self._arm_targets(self._world_twist(per_limb[..., :6]), self.q[..., :NA], self.position_targets[..., :NA])
         residual = (per_limb[..., 6:] * self.cfg.hand_action_scale).clamp(
             -self.cfg.hand_action_clip_rad, self.cfg.hand_action_clip_rad)
         hand = torch.maximum(torch.minimum(self.default_hand + residual, self.joint_upper[:, NA:]),
                              self.joint_lower[:, NA:])
+        self.previous_targets_2.copy_(self.previous_targets)
+        self.previous_targets.copy_(self.position_targets)
         self.position_targets.copy_(torch.cat((arm, hand), dim=-1))
 
     def _apply_action(self):
@@ -259,18 +314,25 @@ class BimanualMotionImitationEnv(DirectRLEnv):
         count = env_ids.numel()
         if self.cfg.rsi_start_index is None:
             start = torch.randint(0, self.reference.last_index, (count,), device=self.device)
+            at_beginning = torch.rand(count, device=self.device) < self.cfg.rsi_start_probability
+            start = torch.where(at_beginning, torch.zeros_like(start), start)
         else:
             start = torch.full((count,), int(self.cfg.rsi_start_index), dtype=torch.long, device=self.device)
-        q, dq = self.reference.q[start], self.reference.dq[start]                 # (count, 2, 26)
+        self._before_reset(env_ids)
+        q, dq = self.ref("q", start, env_ids), self.ref("dq", start, env_ids)       # (count, 2, 26)
         self.reference_index[env_ids] = start
         self.palm_violation_steps[env_ids] = 0
         self.hand_violation_steps[env_ids] = 0
+        self.extra_violation_steps[env_ids] = 0
         self.suppress_arm_action_rate[env_ids] = True
         reset_action = torch.zeros((count, NUM_LIMBS, ACTIONS_PER_LIMB), device=self.device)
         reset_action[..., 6:] = self.hand_actions_for(q[..., NA:])
         self.actions[env_ids] = reset_action.view(count, -1)
         self.previous_actions[env_ids] = reset_action.view(count, -1)
+        self.filtered_actions[env_ids] = reset_action.view(count, -1)
         self.position_targets[env_ids] = q
+        self.previous_targets[env_ids] = q
+        self.previous_targets_2[env_ids] = q
         self.applied_targets[env_ids] = q
         self.applied_arm_delta[env_ids] = 0.0
         self.ik_residual[env_ids] = 0.0
@@ -281,6 +343,7 @@ class BimanualMotionImitationEnv(DirectRLEnv):
             articulation.actuators.target_command.set_position_index(value=q[:, limb].contiguous(), env_ids=ids)
         for values in self.episode_sums.values():
             values[env_ids] = 0.0
+        self._reset_extras(env_ids, start)
 
     # ------------------------------------------------------------------
     # Observations, rewards, terminations
@@ -291,9 +354,11 @@ class BimanualMotionImitationEnv(DirectRLEnv):
         palm_position, palm_quat = self.palm_pose()
         tips_palm = quat_rotate_inverse(palm_quat.unsqueeze(2).expand(-1, -1, 5, -1),
                                         self.fingertips() - palm_position.unsqueeze(2))
+        palm_position, palm_quat = self._observed_palm_pose(palm_position, palm_quat)
+        q, targets, dq = self._observed_joints(q, self.position_targets, dq)
         per_limb = torch.cat((
             self.normalize_positions(q),
-            self.position_targets,
+            targets,
             dq,
             palm_position,
             quat_to_rotation_6d(palm_quat),
@@ -301,17 +366,20 @@ class BimanualMotionImitationEnv(DirectRLEnv):
         ), dim=-1)
         phase = (self.reference_index.float() / self.reference.last_index).unsqueeze(1)
         observation = torch.cat((per_limb.flatten(1), phase), dim=1)
+        extra = self._extra_observations()
+        if extra is not None:
+            observation = torch.cat((observation, extra), dim=1)
         return {"policy": torch.nan_to_num(observation, nan=0.0, posinf=0.0, neginf=0.0)}
 
     def _compute_metrics(self):
         cfg = self.cfg
         index = self.reference_index
         q, dq = self.q, self.dq
-        reference_q, reference_dq = self.reference.q[index], self.reference.dq[index]
+        reference_q, reference_dq = self.ref("q", index), self.ref("dq", index)
         palm_position, palm_quat = self.palm_pose()
         palm_mse = (palm_keypoints(palm_position, palm_quat, PALM_LEVER_ARM_M)
-                    - self.reference.palm_keypoints[index]).square().sum(-1).mean(-1)          # (N, 2)
-        tip_error = (self.fingertips() - self.reference.fingertips[index]).norm(dim=-1).mean(-1)
+                    - self.ref("palm_keypoints", index)).square().sum(-1).mean(-1)          # (N, 2)
+        tip_error = (self.fingertips() - self.ref("fingertips", index)).norm(dim=-1).mean(-1)
         hand_q_error = q[..., NA:] - reference_q[..., NA:]
         hand_dq_error = dq[..., NA:] - reference_dq[..., NA:]
         action_delta = (self.actions - self.previous_actions).view(self.num_envs, NUM_LIMBS, ACTIONS_PER_LIMB)
@@ -331,17 +399,31 @@ class BimanualMotionImitationEnv(DirectRLEnv):
             "arm_joint_rate": (cfg.arm_joint_rate_weight,
                                gaussian(self.applied_arm_delta.square().mean(-1), cfg.arm_joint_rate_std_rad)),
         }
+        # Acceleration of the commanded targets [rad/s^2]: what makes the drives shake.
+        target_acceleration = (self.position_targets - 2.0 * self.previous_targets + self.previous_targets_2) \
+            / self.step_dt ** 2
+        arm_target_acc = target_acceleration[..., :NA].square().mean(-1)
+        hand_target_acc = target_acceleration[..., NA:].square().mean(-1)
+        if cfg.target_acceleration_weight > 0.0:
+            # Linear and saturated, not Gaussian: a chattering policy sits at hundreds of
+            # rad/s^2, where a Gaussian is flat and gives no direction to improve.
+            limit = cfg.target_acceleration_clip
+            penalty = 0.5 * ((arm_target_acc.sqrt() / cfg.arm_target_acceleration_scale).clamp(max=limit)
+                             + (hand_target_acc.sqrt() / cfg.hand_target_acceleration_scale).clamp(max=limit))
+            terms["target_acceleration"] = (-cfg.target_acceleration_weight, penalty)
         reward = sum(weight * value.mean(dim=1) for weight, value in terms.values())
         metrics = {f"reward_{name}": value.mean(dim=1) for name, (_, value) in terms.items()}
         palm_error = palm_mse.sqrt()
         hand_error = hand_q_error.abs().amax(dim=-1)
         metrics.update({
             "palm_keypoint_error_m": palm_error.amax(dim=1),
-            "palm_position_error_m": (palm_position - self.reference.palm_position[index]).norm(dim=-1).amax(dim=1),
+            "palm_position_error_m": (palm_position - self.ref("palm_position", index)).norm(dim=-1).amax(dim=1),
             "fingertip_error_m": tip_error.amax(dim=1),
             "hand_max_error_rad": hand_error.amax(dim=1),
             "hand_rms_error_rad": hand_q_error.square().mean(-1).sqrt().amax(dim=1),
             "ik_residual": self.ik_residual.amax(dim=1),
+            "arm_target_acc": arm_target_acc.sqrt().amax(dim=1),
+            "hand_target_acc": hand_target_acc.sqrt().amax(dim=1),
         })
         return reward, metrics, palm_error, hand_error
 
@@ -357,6 +439,10 @@ class BimanualMotionImitationEnv(DirectRLEnv):
         # A blown-up world ends its episode; nothing non-finite reaches the learner.
         finite = torch.isfinite(self.q).flatten(1).all(dim=1) & torch.isfinite(self.dq).flatten(1).all(dim=1)
         early = early | ~finite
+        extra = self._extra_violation()
+        if extra is not None:
+            self.extra_violation_steps = torch.where(extra, self.extra_violation_steps + 1, 0)
+            early = early | (self.extra_violation_steps >= self.cfg.grace_steps)
         timeout = self.reference_index >= self.reference.last_index
         self._reward = torch.nan_to_num(torch.where(finite, reward, 0.0), nan=0.0, posinf=0.0, neginf=0.0)
         self._metrics = metrics

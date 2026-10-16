@@ -39,6 +39,49 @@ teleoperation/pose_estimation/run.sh
 env -u PYTHONPATH uv run python -m teleoperation.run_sim            # add --record to save Demonstrations
 ```
 
+**Object.** The Scene has the 15 cm cube by default. `--object basin` puts a
+two-handled basin there instead (round, rim Ø 38 cm, 14 cm high, 0.5 kg, one grip
+bar towards each Hand; sizes in `scene.py` `BASIN_*`), for the task of lifting
+it by its handles. Turn the wrists palm down and hook the fingers under the bars.
+`--object book` puts a closed hardcover book there (17 x 24 x 3.6 cm, 0.68 kg; sizes
+in `scene.py` `BOOK_*`), for the task of opening it: the front cover turns on a hinge
+along the spine, which lies towards the left Hand, and the covers overhang the pages
+by 8 mm at the fore-edge, the lip to lift the cover by. The hinge angle is recorded
+as `object_joint_q`.
+`--object basin_cube` puts the basin where it is alone and the 15 cm cube on the
+Table 5 cm from its rim, towards the Arm bases (`scene.py` `BASIN_CUBE_*`), for the
+task of putting the cube in the basin and then lifting the basin. The basin is the
+Object (`object_pose`); the cube's pose is recorded as `cube_pose`.
+`--object bag` puts a 2.5 kg industrial bag of coffee (35 x 22 x 10 cm) flat where the
+basin stands, its long side between the Hands, for the task of lifting it by its short
+ends, which are rounded (half elliptic cylinders sticking out 2.5 cm): it sags about 4 cm
+in the middle and gives about 5 mm under a squeezing fingertip.
+It is six rigid segments joined by sprung bending and twisting joints (a true soft body
+could not be trained on), recorded as `object_joint_q`. `--object bag_sealed` adds a
+flat, rigid sealed seam (4 x 22 x 1 cm) beyond each short end, for the fingers to close on.
+
+**Scripted Demonstrations.** Without the gloves and camera, `teleoperation.scripted_demo`
+plays keyframed Hand-base poses and Hand joints through the same arm IK, Scene and
+recorder (`source: scripted` in the `.json`). `--script bag_lift` lifts `bag_sealed`
+with both Hands: fingers pointing down beside each seam, fingertips hooked under it and
+driven up against the thumb (a pinch), a ~20 cm lift with the Hands closing in as the bag
+sags, a hold, then setting it down and back Home:
+
+```bash
+env -u PYTHONPATH uv run python -m teleoperation.scripted_demo --script bag_lift --record --video out.mp4
+```
+
+`--script bag_lift_plain --object bag` lifts the plain bag from below: palms up, the
+fingers bent back like a spatula's edge slide under each end (the plain bag's end segments
+are raised underneath, `BAG_END_LIFT`), the thumbs close over the top; the left Hand goes
+first and holds its end before the right one slides in.
+The Object is saved in the Demonstration's `.json` (`scene.object`), and replays
+and `view_demonstration` load the same one.
+
+```bash
+env -u PYTHONPATH uv run python -m teleoperation.run_sim --object basin --record
+```
+
 The viewer opens with a view from above (your left on the left, the Hands pointing
 up) and a horizontal view from in front of the Hands in its bottom-right corner,
 to judge heights against the Table and the Object (`--no-inset` to hide it). The

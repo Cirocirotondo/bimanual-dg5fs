@@ -93,7 +93,7 @@ _Avoid_: environment, env, world
 The work surface the Limbs act on in the Scene.
 
 **Object**:
-A free rigid body in the Scene that the Hands manipulate; currently a single 15 cm cube.
+A free body in the Scene that the Hands manipulate, chosen per run: a 15 cm cube (default), a basin with two handles, to be lifted by its handles, a hardcover book, to be opened, the basin with a cube beside it, to put the cube in the basin and lift both, or a coffee bag (an industrial 2.5 kg bag of coffee, 35 × 22 × 10 cm, lying flat; in two variants, with or without flat sealed seams at its short ends), to be lifted by its short ends so that it sags in the middle (it is articulated too: rigid segments along its length joined by sprung joints, standing in for a soft body); the book is articulated (its front cover turns on a hinge along the spine), and with the cube the basin is the Object and the cube an extra free body recorded alongside it.
 _Avoid_: cube (unqualified), box
 
 **Task environment**:
@@ -103,7 +103,7 @@ _Avoid_: environment (unqualified), env
 ### Training
 
 **Reference**:
-The per-frame targets derived from one Demonstration (Hand-base poses and Hand joints of both Limbs, and the Object pose) that a policy learns to imitate.
+The per-frame targets derived from one Demonstration (Hand-base poses and Hand joints of both Limbs, and the Object pose, with the joint angles of an articulated Object such as the book's cover) that a policy learns to imitate.
 _Avoid_: target trajectory, expert data, demo (unqualified)
 
 **Phase**:
@@ -119,4 +119,16 @@ One of three successive versions of the imitation task: Motion imitation (the Li
 _Avoid_: curriculum level, phase (that is the Phase)
 
 **Transform bank**:
-A set of Object start poses, each with the Reference retargeted to it, used to generalise one Demonstration to other Object placements.
+A dense set of feasible Object placements inside the training box, each with the Reference retargeted to it (both Arms re-solved by inverse kinematics in the Demonstration's joint family, the Hands unchanged), used to generalise one Demonstration to Generalised imitation.
+
+**Object placement**:
+Where the Object starts on the Table, as a planar move of the Demonstration's start pose: a translation along the Table and a yaw about the vertical axis through the Object's centre, the yaw folded into [-45°, +45°] because the cube looks the same every 90°. The whole Reference moves rigidly with it.
+_Avoid_: transform (unqualified), randomization, object pose
+
+**Object symmetry**:
+One of the 24 rotations that leave the cube unchanged. At every step the Object's orientation is taken as the symmetry-equivalent one closest to the Reference's current orientation, wherever it is used (rewards, observations, the Object frame of the Hand rewards); so is the orientation of the cube beside the basin.
+_Avoid_: canonical orientation, flip
+
+**Feasibility map**:
+For a regular grid of Object placements, whether the retargeted Reference can be executed: inverse kinematics converges, every joint stays clear of its limits and under its speed limit, and no Limb touches the other Limb or the Table. Each placement records the first criterion it fails.
+_Avoid_: reachability map, workspace (unqualified)

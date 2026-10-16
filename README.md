@@ -7,7 +7,10 @@ two UR5e Arms, each carrying a 20-DOF Tesollo DG-5F-S Hand, for teleoperation an
 policy training. Vocabulary is defined in [CONTEXT.md](CONTEXT.md); design
 decisions are in [docs/adr/](docs/adr/).
 
-- **Scene** (`src/bimanual_dg5fs/scene.py`): both Limbs, Table and Object in MuJoCo, also loadable in Newton.
+- **Scene** (`src/bimanual_dg5fs/scene.py`): both Limbs, Table and Object (cube, a basin with two
+  handles: `build_model("basin")`, a hardcover book whose cover opens: `build_model("book")`, or the
+  basin with a cube beside it: `build_model("basin_cube")`, or a soft-ish bag of coffee:
+  `build_model("bag")` / `"bag_sealed"`) in MuJoCo, also loadable in Newton.
 - **Teleoperation in the Scene** with two MANUS Gloves and one camera: see
   [teleoperation/README.md](teleoperation/README.md).
 - **RL training** in Isaac Lab, imitating recorded Demonstrations: see
@@ -93,6 +96,10 @@ tests/fixtures/reference_scene/                  Reference bimanual_scene_cube.x
 | Mount yaw, per Side | `mount_joint` in each Limb URDF | 0 rad |
 | Table size, height, position | `scene.py` `TABLE_*` | 1.6 x 1.4 x 0.75 m, top at z = 0.02 (Arm base plane), 0.4 m behind the bases, 1.0 m in front |
 | Object mass / start | `scene.py` `OBJECT_*` | 0.2 kg, on the Table between the palms (0, -0.60) |
+| Basin size, handles, mass / start | `scene.py` `BASIN_*` | rim Ø 38 cm, bottom Ø 30 cm, 14 cm high; grip bars 13 cm long, 4 cm from the rim, on ±x; 0.5 kg; (0, -0.58) |
+| Book size, cover hinge / start | `scene.py` `BOOK_*` | 17 x 24 cm, 3 cm of pages, 3 mm boards overhanging 8 mm; 0.68 kg; spine on +x, hinge 0–200° with light friction; friction 1.5 against the Hands (default 1.0); (0, -0.58) |
+| Basin + cube start | `scene.py` `BASIN_CUBE_*` | basin as above; the 15 cm cube 5 cm from the rim towards the Arm bases, (0, -0.265) |
+| Bag size, stiffness / start | `scene.py` `BAG_*` | 35 x 22 x 10 cm body with rounded short ends (half elliptic cylinders sticking out 2.5 cm), 2.5 kg, 6 rigid segments with sprung bend/twist joints: sags 4 cm lifted by its ends held level, a fingertip sinks 5 mm at 10 N; the plain `bag`'s end segments are raised 2.5 cm underneath at the ends (room for the fingers), `bag_sealed` adds 4 x 22 x 1 cm rigid seams at the short ends instead; long side between the Hands, (0, -0.58) |
 | Hand drive gains | `scene.py` `HAND_KP/KV/ARMATURE` | 5 / 0.1 / 0.005 |
 
 Tesollo notes that the DG-5F-S model parameters may change; its URDF masses

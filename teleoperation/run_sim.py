@@ -5,6 +5,9 @@
     env -u PYTHONPATH uv run python -m teleoperation.run_sim --source mock    # no hardware
     env -u PYTHONPATH uv run python -m teleoperation.run_sim --source replay --replay <demo.npz>
     ... --record                                                               # save Demonstrations
+    ... --object basin                                                         # two-handled basin instead of the cube
+    ... --object book                                                          # hardcover book to open
+    ... --object basin_cube                                                    # the basin and a cube to put in it
 
 Commands (type in this terminal, then Enter):
     c      engage / clutch both Limbs      lc / rc   engage / clutch the left / right Limb
@@ -15,6 +18,7 @@ Commands (type in this terminal, then Enter):
     q      quit (an unfinished episode is saved with success unknown)
 """
 import argparse
+import json
 import queue
 import sys
 import threading
@@ -42,6 +46,17 @@ def make_source(args, config):
     i = config["inputs"]
     return LiveSource(i["glove_address"], i["pose_address"], i["wrist_board_index"],
                       i.get("skeleton_address"), i.get("glove_ids"))
+
+
+def object_name(args):
+    """--object, else the Object of the replayed Demonstration, else the cube."""
+    if args.object:
+        return args.object
+    if args.source == "replay" and args.replay:
+        info = Path(args.replay).with_suffix(".json")
+        if info.exists():
+            return json.loads(info.read_text())["scene"].get("object", "cube")
+    return "cube"
 
 
 def start_command_reader():
@@ -100,7 +115,8 @@ class Session:
         if getattr(args, "position_scale", None) is not None:
             self.config["mapping"]["position_scale"] = args.position_scale
         self.dt = 1.0 / self.config["control_hz"]
-        self.model = scene.build_model()
+        self.object_name = object_name(args)
+        self.model = scene.build_model(self.object_name)
         self.data = mujoco.MjData(self.model)
         self.output = SimOutput(self.model, self.data, self.dt)
         limits = {s: joint_limits_from_model(self.model, s) for s in SIDES}
@@ -112,8 +128,7 @@ class Session:
                 args.output_dir, {"source": args.source, "control_hz": self.config["control_hz"],
                                   "config": self.config,
                                   "scene": {"base_pos": scene.BASE_POS, "home_arm_q": scene.HOME_ARM_Q,
-                                            "object_size_m": scene.OBJECT_SIZE,
-                                            "object_mass_kg": scene.OBJECT_MASS}})
+                                            **scene.object_metadata(self.object_name)}})
         if args.source != "replay":
             for side in SIDES:
                 self.core.request_engage(side)
@@ -195,7 +210,7 @@ class Session:
         if self.args.source == "replay":
             print("source: replay; following the recorded engage / clutch events")
         else:
-            print(f"source: {self.args.source}; each Limb engages once its Wrist board has been "
+            print(f"source: {self.args.source}, Object: {self.object_name}; each Limb engages once its Wrist board has been "
                   f"visible for {self.config['tracking']['countdown_s']:.0f} s (hold still meanwhile)")
         start = next_tick = time.monotonic()
         try:
@@ -224,6 +239,8 @@ def main(argv=None):
     parser.add_argument("--replay", help="Demonstration .npz to replay (with --source replay)")
     parser.add_argument("--loop", action="store_true", help="loop the replay")
     parser.add_argument("--record", action="store_true", help="save Demonstrations")
+    parser.add_argument("--object", choices=scene.OBJECTS,
+                        help="Object in the Scene (default: the replayed Demonstration's, else cube)")
     parser.add_argument("--output-dir", default=str(TELEOP_DIR / "demonstrations"))
     parser.add_argument("--config", help="teleop config JSON (default: config/teleop.json)")
     parser.add_argument("--position-scale", type=float,

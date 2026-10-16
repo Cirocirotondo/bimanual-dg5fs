@@ -1,0 +1,30 @@
+{
+  "reference": "lift_cube_2",
+  "size": 1536,
+  "requested": 1536,
+  "drawn": 2048,
+  "acceptance": 0.98095703125,
+  "rejected": {
+    "ik": 0,
+    "limit": 0,
+    "speed": 0,
+    "singular": 39,
+    "collision": 0
+  },
+  "seed": 1,
+  "x_m": [
+    -0.125,
+    0.025000000000000022
+  ],
+  "y_m": [
+    -0.04999999999999999,
+    0.15000000000000002
+  ],
+  "yaw_deg": [
+    -7.499999999999999,
+    7.499999999999999
+  ],
+  "singularity_sigma": 0.1,
+  "frames": 970,
+  "entry_0": "the Demonstration's own placement"
+}

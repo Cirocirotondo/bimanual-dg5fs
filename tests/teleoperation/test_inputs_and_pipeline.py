@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import zmq
 
+from bimanual_dg5fs import scene
 from teleoperation import run_sim
 from teleoperation.core import load_config
 from teleoperation.inputs import LiveSource, parse_board_poses, parse_ergonomics
@@ -112,3 +113,41 @@ def test_replay_reproduces_the_demonstration(recorded):
     for side in ("right", "left"):
         diff = np.abs(original[f"{side}_hand_base_target"][:n, :3] - replayed[f"{side}_hand_base_target"][:n, :3])
         assert np.median(diff) < 1e-3
+
+
+def test_mock_session_with_the_basin_records_it(tmp_path):
+    run_sim.main(["--source", "mock", "--headless", "--duration", "5", "--record", "--object", "basin",
+                  "--output-dir", str(tmp_path)])
+    info = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert info["scene"]["object"] == "basin"
+
+
+def test_mock_session_with_the_book_records_its_hinge(tmp_path):
+    run_sim.main(["--source", "mock", "--headless", "--duration", "5", "--record", "--object", "book",
+                  "--output-dir", str(tmp_path)])
+    info = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert info["scene"]["object"] == "book"
+    assert info["scene"]["object_joints"] == ["book_cover_hinge"]
+    data = np.load(next(tmp_path.glob("*.npz")))
+    assert data["object_joint_q"].shape == (len(data["time"]), 1)
+
+
+def test_mock_session_with_basin_and_cube_records_both(tmp_path):
+    run_sim.main(["--source", "mock", "--headless", "--duration", "5", "--record", "--object", "basin_cube",
+                  "--output-dir", str(tmp_path)])
+    info = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert info["scene"]["object"] == "basin_cube"
+    assert list(info["scene"]["extra_objects"]) == ["cube"]
+    data = np.load(next(tmp_path.glob("*.npz")))
+    assert data["cube_pose"].shape == (len(data["time"]), 7)
+    assert abs(data["cube_pose"][0, 1]) < abs(data["object_pose"][0, 1])
+
+
+def test_mock_session_with_the_bag_records_its_joints(tmp_path):
+    run_sim.main(["--source", "mock", "--headless", "--duration", "5", "--record", "--object", "bag_sealed",
+                  "--output-dir", str(tmp_path)])
+    info = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert info["scene"]["object"] == "bag_sealed"
+    assert len(info["scene"]["object_joints"]) == 2 * (scene.BAG_SEGMENTS - 1)
+    data = np.load(next(tmp_path.glob("*.npz")))
+    assert data["object_joint_q"].shape == (len(data["time"]), 2 * (scene.BAG_SEGMENTS - 1))

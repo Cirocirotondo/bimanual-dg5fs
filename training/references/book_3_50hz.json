@@ -1,0 +1,13 @@
+{
+  "demonstration": "20261013_202257_book_3_trimmed.npz",
+  "object": "book",
+  "object_joints": [
+    "book_cover_hinge"
+  ],
+  "frames": 1180,
+  "duration_s": 23.580000000074506,
+  "dt": 0.02,
+  "lowpass_hz": 3.0,
+  "resampled_from_samples": 1149,
+  "extra_objects": []
+}
